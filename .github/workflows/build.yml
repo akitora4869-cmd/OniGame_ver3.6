@@ -1,0 +1,85 @@
+name: Build OniGame v0.36.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Locate Maven project
+        shell: bash
+        run: |
+          echo "Repository contents:"
+          find . -maxdepth 3 -type f | sort | head -n 200
+
+          POM_PATH="$(find . -maxdepth 4 -type f -name pom.xml             -not -path '*/target/*' | head -n 1)"
+
+          if [ -z "$POM_PATH" ]; then
+            echo "::error::pom.xml was not found anywhere within 4 directory levels."
+            echo "::error::Upload the CONTENTS of the OniGame source ZIP, not the ZIP file itself."
+            exit 1
+          fi
+
+          PROJECT_DIR="$(dirname "$POM_PATH")"
+          echo "Found pom.xml: $POM_PATH"
+          echo "Project directory: $PROJECT_DIR"
+
+          echo "POM_PATH=$POM_PATH" >> "$GITHUB_ENV"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Verify current source
+        shell: bash
+        run: |
+          grep -q '<version>0.36.3</version>' "$POM_PATH"
+          grep -q 'version: 0.36.3' "$PROJECT_DIR/src/main/resources/plugin.yml"
+          grep -q 'openSkillPage' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniGamePlugin.java"
+          grep -q 'Math.min(4,page)' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniGamePlugin.java"
+          grep -q 'threePhaseMask=new HashMap' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniGamePlugin.java"
+          grep -q 'private void registerOniGrudge' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniGamePlugin.java"
+          grep -q 'private boolean consumeGrudgeResistance' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniGamePlugin.java"
+          grep -q 'private void hideLobbyUtilities' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniGamePlugin.java"
+          grep -q 'private void restoreLobbyUtilities' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniGamePlugin.java"
+          grep -q 'openOniPassivePage' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniGamePlugin.java"
+          grep -q 'SCENT_TRAIL' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniPassiveSkill.java"
+          grep -q 'HOMING' "$PROJECT_DIR/src/main/java/jp/muimi/onigame/OniPassiveSkill.java"
+          echo "v0.36.3 source + role GUI verified"
+
+      - name: Build plugin
+        shell: bash
+        run: |
+          mvn --batch-mode --update-snapshots -f "$POM_PATH" clean package
+
+      - name: Verify plugin JAR
+        shell: bash
+        run: |
+          JAR_PATH="$(find "$PROJECT_DIR/target" -maxdepth 1 -type f -name 'OniGame-*.jar'             ! -name '*sources*' ! -name '*javadoc*' | head -n 1)"
+
+          if [ -z "$JAR_PATH" ]; then
+            echo "::error::OniGame JAR not found under $PROJECT_DIR/target"
+            find "$PROJECT_DIR/target" -maxdepth 2 -type f -print || true
+            exit 1
+          fi
+
+          echo "Built JAR: $JAR_PATH"
+          echo "JAR_PATH=$JAR_PATH" >> "$GITHUB_ENV"
+
+      - name: Upload OniGame plugin v0.36.3
+        uses: actions/upload-artifact@v4
+        with:
+          name: OniGame-Paper-1.20.1-v0.36.3
+          path: ${{ env.JAR_PATH }}
+          if-no-files-found: error
+          retention-days: 30
